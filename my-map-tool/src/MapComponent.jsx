@@ -208,7 +208,7 @@ function MapComponent() {
         {/* {routeData && <GeoJSON data={routeData} style={{ color: 'blue' }} />} */}
         {routeData && (
           <GeoJSON
-            key={`${clickPos.lat}-${clickPos.lng}`}
+            key={`${clickPos.lat}-${clickPos.lng}-${totalLength}`}
             data={{
               ...routeData,
               features: routeData.features.filter(f =>
