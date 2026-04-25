@@ -2,6 +2,7 @@
 
 
 // src/MapComponent.jsx
+import { checkErrors } from './utils/CheckErrors';
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, GeoJSON } from 'react-leaflet';
 import * as turf from '@turf/turf';
@@ -96,6 +97,7 @@ function MapComponent() {
     method: 'POST',
     body: query,
     });
+    
     const data = await response.json();
     console.log("Queried Data: ", data);
     const features = data.elements
