@@ -1,18 +1,13 @@
 // in my-map-tool, run > npm run dev
 
-// this file is a rework of the original. 
-// I'm trying to refactor parts of code into new files.
-
 
 // src/MapComponent.jsx
 // import { checkErrors } from './utils/CheckErrors';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, GeoJSON } from 'react-leaflet';
 import * as turf from '@turf/turf';
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css';
-import { buildQuery, fetchOverpass } from './services/overpass';
-import { toGeoJSON } from './utils/geo';
 
 
 
@@ -72,59 +67,89 @@ function MapComponent() {
 
 
 
+
+
+
+
   const fetchRoutes = async () => {
-      const query = buildQuery(clickPos.lat, clickPos.lng, radius);
-      console.log("Query:", query);
 
-      const data = await fetchOverpass(query);
-      console.log("Queried Data:", data);
+    // This Query is stricter. 
+    const query = `
+      [out:json][timeout:25];
+      (
+      node["highway"="bus_stop"](around:${radius},${clickPos.lat},${clickPos.lng});
+      )->.stops;
+      relation["route"="bus"](bn.stops);
+      out geom;
+    `;
 
-      const geojson = toGeoJSON(data);
-      setRouteData(geojson);
 
-      const ops = [...new Set(geojson.features.map(f => f.properties.operator))];
-      setOperators(ops);
+    // const query = `
+    //   [out:json][timeout:25];
+    //   relation["route"="bus"](around:${radius},${clickPos.lat},${clickPos.lng});
+    //   out geom;
+    // `;
 
-      const totalKm = geojson.features.reduce(
-          (sum, f) => sum + turf.length(f),
-          0
-      );
-      setTotalLength(totalKm.toFixed(2));
+    console.log("Query:", query);
+
+
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: query,
+    });
+    
+    const data = await response.json();
+    console.log("Queried Data: ", data);
+    const features = data.elements
+    .filter(el => el.type === 'relation')
+    .flatMap(rel =>
+        rel.members
+        .filter(m => m.type === 'way' && m.geometry)
+        .map(m => ({
+            type: 'Feature',
+            geometry: {
+            type: 'LineString',
+            coordinates: m.geometry
+                .filter(g => g.lat != null && g.lon != null) // drop bad points (nulls)
+                .map(g => [g.lon, g.lat]),
+            },
+            properties: {
+            route: rel.tags?.name || 'unnamed',
+            operator: rel.tags?.operator || rel.tags?.network || 'unknown',
+            relation_id: rel.id,
+            },
+        }))
+    );
+    setRouteData({
+      type: 'FeatureCollection',
+      features,
+    });
+    const operators = [...new Set(features.map(f => f.properties.operator))];
+    setOperators(operators);
+
+    console.log("Operators", operators);
+    
+    console.log("Features", features);
+
+    const totalKm = features.reduce((sum, f) => sum + turf.length(f), 0);
+    setTotalLength(totalKm.toFixed(2));
   };
-
-  // const filteredRouteData = useMemo(() => {
-  //   if (!routeData) return null;
-
-  //   return {
-  //     ...routeData,
-  //     features: routeData.features.filter(f =>
-  //       visibleOperators.has(f.properties.operator)
-  //     )
-  //   };
-  // }, [routeData, visibleOperators]);
-
   
-  // useEffect(() => {
-  //   // if (!clickPos) return;
+  useEffect(() => {
+    // if (!clickPos) return;
 
-  //   // const { lat, lng } = clickPos;
-  //   // Clearing the data here will allow the newest possible route data to be displayed
+    // const { lat, lng } = clickPos;
+    // Clearing the data here will allow the newest possible route data to be displayed
 
 
-  //   // setRouteData(null);
+    // setRouteData(null);
 
-  //   // console.log("clickPos:", clickPos);
+    // console.log("clickPos:", clickPos);
 
-  //   // fetchRoutes();
+    // fetchRoutes();
 
-  //   // console.log("Routes:", routeData);
-  // }, [])
-
-    useEffect(() => {
-        if (operators.length > 0) {
-            setVisibleOperators(new Set(operators));
-        }
-    }, [operators]);
+    // console.log("Routes:", routeData);
+  }, [])
 
 
 
@@ -175,7 +200,7 @@ function MapComponent() {
 
           <Circle
             center={clickPos}
-            radius={radius} // meters
+            radius={500} // meters
             pathOptions={{ color: 'blue', fillOpacity: 0.1 }}
           />
           {/* <GeoJSON data={routeData} style={{ color: 'green' }} /> */}
